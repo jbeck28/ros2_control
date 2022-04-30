@@ -263,8 +263,8 @@ class ExternalComponent : public hardware_interface::ActuatorInterface
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override
   {
     std::vector<hardware_interface::StateInterface> state_interfaces;
-    state_interfaces.emplace_back(
-      hardware_interface::StateInterface("external_joint", "external_state_interface", nullptr));
+    state_interfaces.emplace_back(hardware_interface::StateInterface(
+      "external_joint", "external_state_interface", &external_state_interface_));
 
     return state_interfaces;
   }
@@ -273,7 +273,7 @@ class ExternalComponent : public hardware_interface::ActuatorInterface
   {
     std::vector<hardware_interface::CommandInterface> command_interfaces;
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-      "external_joint", "external_command_interface", nullptr));
+      "external_joint", "external_command_interface", &external_command_interface_));
 
     return command_interfaces;
   }
@@ -283,6 +283,10 @@ class ExternalComponent : public hardware_interface::ActuatorInterface
   hardware_interface::return_type read() override { return hardware_interface::return_type::OK; }
 
   hardware_interface::return_type write() override { return hardware_interface::return_type::OK; }
+
+private:
+  double external_state_interface_ = 28.0;
+  double external_command_interface_ = 1989.0;
 };
 
 TEST_F(TestResourceManager, post_initialization_add_components)
