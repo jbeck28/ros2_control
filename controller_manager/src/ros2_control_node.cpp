@@ -21,6 +21,9 @@
 #include "controller_manager/controller_manager.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include <realtime_tools/realtime_publisher.h>
+#include <std_msgs/msg/float64.hpp>
+
 using namespace std::chrono_literals;
 
 int main(int argc, char ** argv)
@@ -31,6 +34,7 @@ int main(int argc, char ** argv)
     std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   std::string manager_node_name = "controller_manager";
 
+
   auto cm = std::make_shared<controller_manager::ControllerManager>(executor, manager_node_name);
 
   // TODO(anyone): Due to issues with the MutliThreadedExecutor, this control loop does not rely on
@@ -39,6 +43,10 @@ int main(int argc, char ** argv)
   // converted back to a timer.
   std::thread cm_thread([cm]() {
     RCLCPP_INFO(cm->get_logger(), "update rate is %d Hz", cm->get_update_rate());
+    
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_;
+    publisher_ = cm->create_publisher<std_msgs::msg::Float64>("loop_period", 10);
+    realtime_tools::RealtimePublisher<std_msgs::msg::Float64> rt_pub(publisher_);
 
     rclcpp::Time current_time = cm->now();
     rclcpp::Time previous_time = current_time;
@@ -57,12 +65,34 @@ int main(int argc, char ** argv)
       auto period = current_time - previous_time;
       cm->read(current_time, period);
       current_time = cm->now();
+
       cm->update(current_time, period);
+
+      
+      if (rt_pub.trylock()){
+        rt_pub.msg_.data = rclcpp::Duration(current_time-previous_time).seconds();
+        rt_pub.unlockAndPublish();
+      }
+      
       previous_time = current_time;
       cm->write(current_time, period);
     }
   });
+   pthread_t this_thread = cm_thread.native_handle();
+    int ret;
+    struct sched_param params;
+    params.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    std::cout <<"Attemping to set thread realtime prio = " << params.sched_priority <<std::endl;
 
+    // Attempt to set thread real-time priority to the SCHED_FIFO policy
+    ret = pthread_setschedparam(this_thread, SCHED_FIFO, &params);
+    if (ret != 0) {
+        // Print the error
+        std::cout << "Unsuccessful in setting thread realtime prio" << std::endl;
+        //return;     
+    }else{
+      std::cout <<"Successfully set thread priority" << std::endl;
+    }
   executor->add_node(cm);
   executor->spin();
   cm_thread.join();
