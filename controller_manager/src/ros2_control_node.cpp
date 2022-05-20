@@ -45,13 +45,17 @@ int main(int argc, char ** argv)
     RCLCPP_INFO(cm->get_logger(), "update rate is %d Hz", cm->get_update_rate());
     
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher_;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr calc_time_pub_;
     publisher_ = cm->create_publisher<std_msgs::msg::Float64>("loop_period", 10);
+    calc_time_pub_ = cm->create_publisher<std_msgs::msg::Float64>("update_time", 10);
     realtime_tools::RealtimePublisher<std_msgs::msg::Float64> rt_pub(publisher_);
+    realtime_tools::RealtimePublisher<std_msgs::msg::Float64> rt_calc_time_pub(calc_time_pub_);
 
     rclcpp::Time current_time = cm->now();
     rclcpp::Time previous_time = current_time;
     rclcpp::Time end_period = current_time;
-
+    rclcpp::Time calc_time_start;
+    rclcpp::Time calc_time_end;
     // Use nanoseconds to avoid chrono's rounding
     rclcpp::Duration period(std::chrono::nanoseconds(1000000000 / cm->get_update_rate()));
 
@@ -66,12 +70,20 @@ int main(int argc, char ** argv)
       cm->read(current_time, period);
       current_time = cm->now();
 
+
       cm->update(current_time, period);
 
+
+      calc_time_start = cm->now();
       
+      calc_time_end = cm->now();
       if (rt_pub.trylock()){
         rt_pub.msg_.data = rclcpp::Duration(current_time-previous_time).seconds();
         rt_pub.unlockAndPublish();
+      }
+      if(rt_calc_time_pub.trylock()){
+        rt_calc_time_pub.msg_.data = rclcpp::Duration(calc_time_start - calc_time_end).seconds();
+        rt_calc_time_pub.unlockAndPublish();
       }
       
       previous_time = current_time;
